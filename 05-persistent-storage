@@ -1,0 +1,272 @@
+
+# Project 05 - Persistent Storage and Data Integrity
+
+Campus Library Loan System
+
+## Project Overview
+
+This project explores persistent container storage and data integrity using Docker Compose, Apache HTTPD and PostgreSQL within a simulated campus library loan environment.
+
+The project focuses on Docker named volumes, database persistence, container lifecycle management, network segmentation, resource management, container hardening and database disaster recovery.
+
+## Technical Objectives
+
+- Deploy Apache HTTPD and PostgreSQL containers.
+- Configure CPU and memory restrictions.
+- Implement frontend and backend network segmentation.
+- Restrict direct database exposure.
+- Configure persistent database storage using named volumes.
+- Verify database records across container recreation.
+- Apply least-privilege security controls.
+- Perform database backup and restoration.
+- Verify database record integrity after recovery.
+
+## Service Configuration
+
+| Parameter | Web Service | Database Service |
+|---|---|---|
+| Service | libraryportal | database |
+| Container | library-web | library-db |
+| Image | httpd:2.4 | postgres:16 |
+| Published Port | 8142:80 | Disabled |
+| CPU Limit | 0.55 | 0.75 |
+| Memory Limit | 320 MiB | 768 MiB |
+| Restart Policy | unless-stopped | always |
+
+## Network Architecture
+
+| Network | Driver | Connected Services |
+|---|---|---|
+| library-front | bridge | Web |
+| library-back | bridge | Web and Database |
+
+The database is restricted to the backend network without a published host port.
+
+Separate frontend and backend networks reduce unnecessary service exposure while maintaining internal container connectivity.
+
+## Docker Compose Configuration
+
+```yaml
+services:
+  libraryportal:
+    image: httpd:2.4
+    container_name: library-web
+    ports:
+      - "8142:80"
+    cpus: 0.55
+    mem_limit: 320m
+    restart: unless-stopped
+    networks:
+      - library-front
+      - library-back
+    privileged: false
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  database:
+    image: postgres:16
+    container_name: library-db
+    environment:
+      POSTGRES_DB: librarydb
+      POSTGRES_USER: loanuser
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set password}
+    cpus: 0.75
+    mem_limit: 768m
+    restart: always
+    networks:
+      - library-back
+    volumes:
+      - library-data:/var/lib/postgresql/data
+
+networks:
+  library-front:
+    name: library-front
+    driver: bridge
+
+  library-back:
+    name: library-back
+    driver: bridge
+
+volumes:
+  library-data:
+    name: library-data
+```
+
+## Security Controls
+
+| Control | Purpose |
+|---|---|
+| Named Docker volumes | Maintain persistent database storage |
+| Volume lifecycle management | Preserve data across container recreation |
+| privileged: false | Avoid privileged execution |
+| cap_drop: ALL | Remove Linux capabilities |
+| no-new-privileges | Prevent additional privilege acquisition |
+| Network segmentation | Restrict unnecessary communication |
+| Resource limits | Control resource consumption |
+| Database port isolation | Reduce direct database exposure |
+| Environment variables | Avoid hardcoded database passwords |
+
+## Deployment and Verification
+
+```powershell
+docker compose config --quiet
+docker compose up -d
+docker compose ps
+docker stats --no-stream
+docker network inspect library-front
+docker network inspect library-back
+docker volume inspect library-data
+docker logs library-web
+docker exec library-db pg_isready -U loanuser -d librarydb
+```
+
+Web service testing is performed using localhost on port 8142.
+
+## Persistent Storage Configuration
+
+| Parameter | Configuration |
+|---|---|
+| Database | librarydb |
+| Database User | loanuser |
+| Test Table | loans |
+| Storage Type | Named Docker Volume |
+| Volume Name | library-data |
+| Mount Path | /var/lib/postgresql/data |
+
+Docker named volumes maintain database records independently of the container lifecycle.
+
+The database container can be recreated without deleting the persistent storage volume.
+
+## Data Persistence Verification
+
+Access the PostgreSQL database:
+
+```powershell
+docker exec -it library-db psql -U loanuser -d librarydb
+```
+
+Create a sample table and insert a fictional library loan record:
+
+```sql
+CREATE TABLE IF NOT EXISTS loans (
+    id SERIAL PRIMARY KEY,
+    book_title VARCHAR(100),
+    borrower VARCHAR(100)
+);
+
+INSERT INTO loans (book_title, borrower)
+VALUES ('Container Security Fundamentals', 'Test Borrower');
+
+SELECT id, book_title, borrower FROM loans;
+```
+
+Exit PostgreSQL and recreate the database container without deleting its volume:
+
+```powershell
+docker compose up -d --force-recreate database
+docker exec library-db pg_isready -U loanuser -d librarydb
+```
+
+After PostgreSQL is ready, verify the original database record:
+
+```powershell
+docker exec library-db psql -U loanuser -d librarydb -c "SELECT id, book_title, borrower FROM loans;"
+```
+
+## Expected Verification Results
+
+| Verification Test | Expected Result |
+|---|---|
+| Named volume creation | library-data exists |
+| Database record insertion | Successful |
+| Database container recreation | Successful |
+| Persistent volume retention | Original volume retained |
+| Database record verification | Original record remains |
+| Database port exposure | None |
+
+Data persistence verification focuses on confirming that database records remain available after container recreation.
+
+## Persistent Storage and Recovery
+
+| Parameter | Configuration |
+|---|---|
+| Database | librarydb |
+| Test Table | loans |
+| Original Volume | library-data |
+| Backup Directory | C:\LibraryBackup |
+| Backup Archive | library-data.tar.gz |
+| Restored Volume | library-restored |
+
+The recovery procedure involves stopping PostgreSQL, creating a physical volume backup, restoring the archive into a separate volume and verifying the original database records.
+
+The final Compose configuration uses library-restored as an external volume after restoration.
+
+The original volume is retained until successful recovery has been confirmed.
+
+## Restored Volume Configuration
+
+Update the database service volume configuration after restoration:
+
+```yaml
+volumes:
+  - library-restored:/var/lib/postgresql/data
+```
+
+Declare the restored volume at the top level:
+
+```yaml
+volumes:
+  library-restored:
+    name: library-restored
+    external: true
+```
+
+The restored volume must exist and contain the recovered database files before deployment.
+
+## Security Principles
+
+- Defence in depth
+- Least privilege
+- Attack surface reduction
+- Network segmentation
+- Data integrity
+- Data availability
+- Persistent storage management
+- Operational resilience
+
+## Learning Outcomes
+
+- Docker named volume configuration
+- PostgreSQL persistent storage
+- Container lifecycle management
+- Database record verification
+- Data persistence testing
+- Volume backup and restoration
+- Secure infrastructure deployment
+- Infrastructure security verification
+
+## Project Status
+
+Status: Completed
+
+Project Type: Hands-on Container Security Lab
+
+Environment: Controlled Local Laboratory
+
+Portfolio Status: Active and Continuously Expanding
+
+This project forms part of my practical development in container security, secure infrastructure deployment and system administration.
+
+Future improvements and additional security controls may be introduced as my technical experience develops.
+
+## Project Scope
+
+This project is adapted from a container security practical exercise and operates within a controlled local laboratory environment.
+
+The web and database services demonstrate infrastructure deployment, persistent storage and data integrity rather than a complete production library loan application.
+
+---
+
+Container Security Portfolio - Project 05
