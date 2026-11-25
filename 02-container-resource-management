@@ -1,0 +1,192 @@
+
+# Project 02 - Container Resource Management
+
+Campus Equipment Booking System
+
+## Project Overview
+
+This project explores container resource management using Docker Compose, Apache HTTPD and PostgreSQL within a simulated campus equipment booking environment.
+
+The project focuses on CPU and memory restrictions, resource monitoring, service availability, network segmentation, container hardening, persistent storage and database disaster recovery.
+
+## Technical Objectives
+
+- Deploy Apache HTTPD and PostgreSQL containers.
+- Configure individual CPU and memory restrictions.
+- Monitor container resource utilisation.
+- Implement automatic restart policies.
+- Implement frontend and backend network segmentation.
+- Apply least-privilege security controls.
+- Maintain persistent database storage.
+- Perform database backup and restoration.
+
+## Service Configuration
+
+| Parameter | Web Service | Database Service |
+|---|---|---|
+| Service | booking | database |
+| Container | booking-web | booking-db |
+| Image | httpd:2.4 | postgres:16 |
+| Published Port | 8112:80 | Disabled |
+| CPU Limit | 0.7 | 0.6 |
+| Memory Limit | 352 MiB | 576 MiB |
+| Restart Policy | unless-stopped | always |
+
+## Network Architecture
+
+| Network | Driver | Connected Services |
+|---|---|---|
+| booking-front | bridge | Web |
+| booking-back | bridge | Web and Database |
+
+The database is restricted to the backend network without a published host port.
+
+## Docker Compose Configuration
+
+```yaml
+services:
+  booking:
+    image: httpd:2.4
+    container_name: booking-web
+    ports:
+      - "8112:80"
+    cpus: 0.7
+    mem_limit: 352m
+    restart: unless-stopped
+    networks:
+      - booking-front
+      - booking-back
+    privileged: false
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  database:
+    image: postgres:16
+    container_name: booking-db
+    environment:
+      POSTGRES_DB: bookingdb
+      POSTGRES_USER: bookinguser
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set password}
+    cpus: 0.6
+    mem_limit: 576m
+    restart: always
+    networks:
+      - booking-back
+    volumes:
+      - booking-data:/var/lib/postgresql/data
+
+networks:
+  booking-front:
+    name: booking-front
+    driver: bridge
+
+  booking-back:
+    name: booking-back
+    driver: bridge
+
+volumes:
+  booking-data:
+    name: booking-data
+```
+
+## Security Controls
+
+| Control | Purpose |
+|---|---|
+| cpus | Restrict container CPU consumption |
+| mem_limit | Restrict container memory consumption |
+| Restart policies | Support automatic service recovery |
+| privileged: false | Avoid privileged execution |
+| cap_drop: ALL | Remove Linux capabilities |
+| no-new-privileges | Prevent additional privilege acquisition |
+| Network segmentation | Restrict unnecessary communication |
+| Database port isolation | Reduce direct database exposure |
+
+## Deployment and Verification
+
+```powershell
+docker compose config --quiet
+docker compose up -d
+docker compose ps
+docker stats --no-stream
+docker inspect booking-web --format '{{.HostConfig.NanoCpus}}'
+docker inspect booking-web --format '{{.HostConfig.Memory}}'
+docker inspect booking-db --format '{{.HostConfig.NanoCpus}}'
+docker inspect booking-db --format '{{.HostConfig.Memory}}'
+docker network inspect booking-front
+docker network inspect booking-back
+docker logs booking-web
+docker exec booking-db pg_isready -U bookinguser -d bookingdb
+```
+
+Web service testing is performed using localhost on port 8112.
+
+## Resource Verification
+
+| Container | Expected NanoCPUs | Expected Memory in Bytes |
+|---|---|---|
+| booking-web | 700000000 | 369098752 |
+| booking-db | 600000000 | 603979776 |
+
+Resource verification focuses on confirming that individual containers operate within their configured CPU and memory restrictions.
+
+## Persistent Storage and Recovery
+
+| Parameter | Configuration |
+|---|---|
+| Database | bookingdb |
+| Test Table | reservations |
+| Original Volume | booking-data |
+| Backup Directory | C:\BookingBackup |
+| Backup Archive | booking-data.tar.gz |
+| Restored Volume | booking-restored |
+
+The recovery procedure involves stopping PostgreSQL, creating a physical volume backup, restoring the archive into a separate volume and verifying the original database records.
+
+The final Compose configuration uses booking-restored as an external volume after restoration.
+
+## Security Principles
+
+- Defence in depth
+- Least privilege
+- Resource isolation
+- Attack surface reduction
+- Network segmentation
+- Service availability
+- Operational resilience
+
+## Learning Outcomes
+
+- Container CPU and memory management
+- Docker Compose configuration
+- Container resource monitoring
+- Container restart policies
+- Infrastructure resource restrictions
+- PostgreSQL deployment
+- Infrastructure security verification
+
+## Project Status
+
+Status: Completed
+
+Project Type: Hands-on Container Security Lab
+
+Environment: Controlled Local Laboratory
+
+Portfolio Status: Active and Continuously Expanding
+
+This project forms part of my practical development in container security, secure infrastructure deployment and system administration.
+
+Future improvements and additional security controls may be introduced as my technical experience develops.
+
+## Project Scope
+
+This project is adapted from a container security practical exercise and operates within a controlled local laboratory environment.
+
+The web and database services demonstrate infrastructure deployment and resource management rather than a complete production equipment booking application.
+
+---
+
+Container Security Portfolio - Project 02
