@@ -1,0 +1,413 @@
+
+# Project 06 - Database Backup and Disaster Recovery
+
+Campus Facility Maintenance System
+
+## Project Overview
+
+This project explores database backup and disaster recovery using Docker Compose, Apache HTTPD and PostgreSQL within a simulated campus facility maintenance environment.
+
+The project focuses on persistent database storage, physical volume backups, database restoration, recovery verification, network segmentation, resource management and container security hardening.
+
+The primary objective is to develop reliable database recovery procedures while maintaining data integrity, service availability and operational resilience.
+
+## Technical Objectives
+
+- Deploy Apache HTTPD and PostgreSQL containers.
+- Configure CPU and memory restrictions.
+- Implement frontend and backend network segmentation.
+- Restrict direct database exposure.
+- Apply least-privilege security controls.
+- Maintain persistent database storage.
+- Create physical database volume backups.
+- Restore database files into a separate Docker volume.
+- Verify database records after restoration.
+- Retain original database storage until recovery is confirmed.
+
+## Service Configuration
+
+| Parameter | Web Service | Database Service |
+|---|---|---|
+| Service | maintenance | database |
+| Container | facility-web | facility-db |
+| Image | httpd:2.4 | postgres:16 |
+| Published Port | 8150:80 | Disabled |
+| CPU Limit | 0.9 | 0.6 |
+| Memory Limit | 512 MiB | 640 MiB |
+| Restart Policy | unless-stopped | always |
+
+## Network Architecture
+
+| Network | Driver | Connected Services |
+|---|---|---|
+| facility-front | bridge | Web |
+| facility-back | bridge | Web and Database |
+
+The database is restricted to the backend network without a published host port.
+
+Network segmentation reduces unnecessary service exposure while maintaining internal container connectivity.
+
+## Docker Compose Configuration
+
+```yaml
+services:
+  maintenance:
+    image: httpd:2.4
+    container_name: facility-web
+    ports:
+      - "8150:80"
+    cpus: 0.9
+    mem_limit: 512m
+    restart: unless-stopped
+    networks:
+      - facility-front
+      - facility-back
+    privileged: false
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  database:
+    image: postgres:16
+    container_name: facility-db
+    environment:
+      POSTGRES_DB: facilitydb
+      POSTGRES_USER: facilityuser
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set password}
+    cpus: 0.6
+    mem_limit: 640m
+    restart: always
+    networks:
+      - facility-back
+    volumes:
+      - facility-data:/var/lib/postgresql/data
+
+networks:
+  facility-front:
+    name: facility-front
+    driver: bridge
+
+  facility-back:
+    name: facility-back
+    driver: bridge
+
+volumes:
+  facility-data:
+    name: facility-data
+```
+
+## Security Controls
+
+| Control | Purpose |
+|---|---|
+| Named Docker volumes | Maintain persistent database storage |
+| Physical volume backup | Preserve database files for recovery |
+| Separate restoration volume | Protect original database storage |
+| Recovery verification | Confirm recovered database records |
+| privileged: false | Avoid privileged execution |
+| cap_drop: ALL | Remove Linux capabilities |
+| no-new-privileges | Prevent additional privilege acquisition |
+| Network segmentation | Restrict unnecessary communication |
+| Resource limits | Control resource consumption |
+| Database port isolation | Reduce direct database exposure |
+
+## Deployment and Verification
+
+```powershell
+docker compose config --quiet
+docker compose up -d
+docker compose ps
+docker stats --no-stream
+docker network inspect facility-front
+docker network inspect facility-back
+docker volume inspect facility-data
+docker logs facility-web
+docker exec facility-db pg_isready -U facilityuser -d facilitydb
+```
+
+Web service testing is performed using localhost on port 8150.
+
+## Persistent Storage Configuration
+
+| Parameter | Configuration |
+|---|---|
+| Database | facilitydb |
+| Database User | facilityuser |
+| Test Table | workorders |
+| Storage Type | Named Docker Volume |
+| Volume Name | facility-data |
+| Mount Path | /var/lib/postgresql/data |
+
+Persistent database storage maintains records independently of the container lifecycle.
+
+## Database Record Preparation
+
+Access the PostgreSQL database:
+
+```powershell
+docker exec -it facility-db psql -U facilityuser -d facilitydb
+```
+
+Create a sample table and insert a fictional maintenance record:
+
+```sql
+CREATE TABLE IF NOT EXISTS workorders (
+    id SERIAL PRIMARY KEY,
+    description VARCHAR(150),
+    status VARCHAR(50)
+);
+
+INSERT INTO workorders (description, status)
+VALUES ('Scheduled equipment inspection', 'Pending');
+
+SELECT id, description, status FROM workorders;
+```
+
+Record the database contents before performing backup and restoration.
+
+## Database Persistence Verification
+
+Exit PostgreSQL and recreate the database container:
+
+```powershell
+docker compose up -d --force-recreate database
+docker exec facility-db pg_isready -U facilityuser -d facilitydb
+```
+
+After PostgreSQL is ready, verify that the original database record remains:
+
+```powershell
+docker exec facility-db psql -U facilityuser -d facilitydb -c "SELECT id, description, status FROM workorders;"
+```
+
+## Database Backup Configuration
+
+| Parameter | Configuration |
+|---|---|
+| Original Volume | facility-data |
+| Backup Directory | C:\FacilityBackup |
+| Backup Archive | facility-data.tar.gz |
+| Restored Volume | facility-restored |
+| Backup Method | Physical Volume Archive |
+| Recovery Method | Separate Docker Volume Restoration |
+
+## Database Backup Procedure
+
+### Step 1 - Stop the Database
+
+```powershell
+docker compose stop database
+```
+
+Stopping PostgreSQL before creating a physical volume backup helps prevent inconsistent database files.
+
+### Step 2 - Create the Backup Directory
+
+```powershell
+New-Item -ItemType Directory -Force -Path "C:\FacilityBackup"
+```
+
+### Step 3 - Create the Backup Archive
+
+```powershell
+docker run --rm -v facility-data:/source:ro -v "C:\FacilityBackup:/backup" alpine tar -czf /backup/facility-data.tar.gz -C /source .
+```
+
+The original database volume is mounted as read-only during the backup procedure.
+
+The temporary backup container uses a host directory mount to store the archive. No host bind mounts are configured in the application Compose services.
+
+### Step 4 - Verify the Backup Archive
+
+```powershell
+Get-Item "C:\FacilityBackup\facility-data.tar.gz"
+```
+
+Inspect the archive contents:
+
+```powershell
+docker run --rm -v "C:\FacilityBackup:/backup:ro" alpine tar -tzf /backup/facility-data.tar.gz
+```
+
+## Database Restoration Procedure
+
+### Step 1 - Create a Separate Restoration Volume
+
+```powershell
+docker volume create facility-restored
+```
+
+The restoration volume must be new or empty before extracting the backup.
+
+### Step 2 - Restore the Database Archive
+
+```powershell
+docker run --rm -v facility-restored:/restore -v "C:\FacilityBackup:/backup:ro" alpine tar -xzpf /backup/facility-data.tar.gz -C /restore
+```
+
+The backup archive is mounted as read-only during restoration.
+
+### Step 3 - Verify the Restored Volume
+
+```powershell
+docker volume inspect facility-restored
+```
+
+### Step 4 - Update Docker Compose
+
+Replace the original database volume configuration with:
+
+```yaml
+volumes:
+  - facility-restored:/var/lib/postgresql/data
+```
+
+Declare the restored volume at the top level:
+
+```yaml
+volumes:
+  facility-restored:
+    name: facility-restored
+    external: true
+```
+
+### Step 5 - Recreate the Database Container
+
+```powershell
+docker compose config --quiet
+docker compose up -d --force-recreate database
+docker compose ps
+docker exec facility-db pg_isready -U facilityuser -d facilitydb
+```
+
+### Step 6 - Verify Recovered Database Records
+
+After PostgreSQL is ready, inspect the restored database records:
+
+```powershell
+docker exec facility-db psql -U facilityuser -d facilitydb -c "SELECT id, description, status FROM workorders;"
+```
+
+Compare the recovered database records with the original records before backup.
+
+The original database volume is retained until successful recovery has been confirmed.
+
+## Final Docker Compose Configuration
+
+```yaml
+services:
+  maintenance:
+    image: httpd:2.4
+    container_name: facility-web
+    ports:
+      - "8150:80"
+    cpus: 0.9
+    mem_limit: 512m
+    restart: unless-stopped
+    networks:
+      - facility-front
+      - facility-back
+    privileged: false
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  database:
+    image: postgres:16
+    container_name: facility-db
+    environment:
+      POSTGRES_DB: facilitydb
+      POSTGRES_USER: facilityuser
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set password}
+    cpus: 0.6
+    mem_limit: 640m
+    restart: always
+    networks:
+      - facility-back
+    volumes:
+      - facility-restored:/var/lib/postgresql/data
+
+networks:
+  facility-front:
+    name: facility-front
+    driver: bridge
+
+  facility-back:
+    name: facility-back
+    driver: bridge
+
+volumes:
+  facility-restored:
+    name: facility-restored
+    external: true
+```
+
+## Recovery Verification
+
+| Verification Test | Expected Result |
+|---|---|
+| Original database volume | facility-data exists |
+| Database shutdown | Successful |
+| Backup archive creation | Successful |
+| Backup archive inspection | Database files present |
+| Restoration volume creation | facility-restored exists |
+| Database restoration | Successful |
+| Database container recreation | Successful |
+| PostgreSQL readiness | Accepting connections |
+| Recovered database records | Match original records |
+| Original database volume | Retained |
+
+Recovery verification focuses on confirming database availability and preservation of the original database records.
+
+## Security Principles
+
+- Defence in depth
+- Least privilege
+- Attack surface reduction
+- Network segmentation
+- Data integrity
+- Data availability
+- Backup consistency
+- Disaster recovery
+- Operational resilience
+
+## Learning Outcomes
+
+- PostgreSQL database backup
+- Physical volume archive management
+- Docker volume restoration
+- Database recovery procedures
+- Database record verification
+- Persistent storage management
+- Container lifecycle management
+- Secure infrastructure deployment
+- Infrastructure security verification
+- Disaster recovery planning
+
+## Project Status
+
+Status: Completed
+
+Project Type: Hands-on Container Security Lab
+
+Environment: Controlled Local Laboratory
+
+Portfolio Status: Active and Continuously Expanding
+
+This project forms part of my practical development in container security, secure infrastructure deployment and system administration.
+
+Future improvements and additional security controls may be introduced as my technical experience develops.
+
+## Project Scope
+
+This project is adapted from a container security practical exercise and operates within a controlled local laboratory environment.
+
+The web and database services demonstrate infrastructure deployment, database backup and disaster recovery rather than a complete production facility maintenance application.
+
+The recovery procedures demonstrate local physical volume backups and do not represent a complete enterprise disaster recovery strategy.
+
+---
+
+Container Security Portfolio - Project 06
