@@ -1,0 +1,225 @@
+
+# Project 07 - Container Health Monitoring and Secure Deployment
+
+Campus IT Asset Inventory System
+
+## Project Overview
+
+This project explores container health monitoring, service reliability and secure infrastructure deployment using Docker Compose, Apache HTTPD and PostgreSQL.
+
+The project extends previous container security exercises by introducing database health checks, health-based service dependencies and operational availability monitoring.
+
+## Technical Objectives
+
+- Deploy a multi-container infrastructure environment.
+- Configure CPU and memory restrictions.
+- Implement frontend and backend network segmentation.
+- Restrict direct database exposure.
+- Configure persistent database storage.
+- Apply least-privilege security controls.
+- Implement database health checks.
+- Configure health-based startup dependencies.
+- Perform database backup and restoration.
+
+## Service Configuration
+
+| Parameter | Web Service | Database Service |
+|---|---|---|
+| Service | assetportal | database |
+| Container | assets-web | assets-db |
+| Image | httpd:2.4 | postgres:16 |
+| Published Port | 8160:80 | Disabled |
+| CPU Limit | 0.7 | 0.6 |
+| Memory Limit | 384 MiB | 640 MiB |
+| Restart Policy | unless-stopped | always |
+
+## Network Architecture
+
+| Network | Driver | Connected Services |
+|---|---|---|
+| assets-front | bridge | Web |
+| assets-back | bridge | Web and Database |
+
+The database is restricted to the backend network without a published host port.
+
+## Docker Compose Configuration
+
+```yaml
+services:
+  assetportal:
+    image: httpd:2.4
+    container_name: assets-web
+    ports:
+      - "8160:80"
+    cpus: 0.7
+    mem_limit: 384m
+    restart: unless-stopped
+    networks:
+      - assets-front
+      - assets-back
+    privileged: false
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      database:
+        condition: service_healthy
+
+  database:
+    image: postgres:16
+    container_name: assets-db
+    environment:
+      POSTGRES_DB: assetsdb
+      POSTGRES_USER: assetuser
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set password}
+    cpus: 0.6
+    mem_limit: 640m
+    restart: always
+    networks:
+      - assets-back
+    volumes:
+      - assets-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD
+        - pg_isready
+        - -U
+        - assetuser
+        - -d
+        - assetsdb
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+networks:
+  assets-front:
+    name: assets-front
+    driver: bridge
+
+  assets-back:
+    name: assets-back
+    driver: bridge
+
+volumes:
+  assets-data:
+    name: assets-data
+```
+
+## Health Check Configuration
+
+| Parameter | Configuration |
+|---|---|
+| Health Check Utility | pg_isready |
+| Interval | 10 seconds |
+| Timeout | 5 seconds |
+| Retries | 5 |
+| Start Period | 20 seconds |
+| Startup Dependency | service_healthy |
+
+The web service waits for PostgreSQL to report a healthy status during initial Compose startup.
+
+Health checks provide additional visibility into database readiness and operational availability.
+
+## Security Controls
+
+| Control | Purpose |
+|---|---|
+| privileged: false | Avoid privileged execution |
+| cap_drop: ALL | Remove Linux capabilities |
+| no-new-privileges | Prevent privilege acquisition |
+| Network segmentation | Restrict unnecessary communication |
+| Resource limits | Control resource consumption |
+| Database port isolation | Reduce direct database exposure |
+| Health checks | Monitor database readiness |
+| Named volumes | Maintain persistent storage |
+
+## Deployment and Verification
+
+```powershell
+docker compose config --quiet
+docker compose up -d
+docker compose ps
+docker stats --no-stream
+docker network inspect assets-front
+docker network inspect assets-back
+docker logs assets-web
+docker exec assets-db pg_isready -U assetuser -d assetsdb
+```
+
+Web service testing is performed using localhost on port 8160.
+
+## Health Monitoring Verification
+
+```powershell
+docker inspect --format "{{.State.Health.Status}}" assets-db
+docker inspect --format "{{json .State.Health}}" assets-db
+docker compose stop database
+docker compose ps -a
+docker compose start database
+docker compose ps
+```
+
+Monitor the database health status until PostgreSQL becomes healthy again.
+
+Health-based startup dependencies do not automatically restart dependent services when the database becomes unhealthy.
+
+## Persistent Storage and Recovery
+
+| Parameter | Configuration |
+|---|---|
+| Database | assetsdb |
+| Test Table | inventory |
+| Original Volume | assets-data |
+| Backup Directory | C:\AssetsBackup |
+| Backup Archive | assets-data.tar.gz |
+| Restored Volume | assets-restored |
+
+The recovery procedure involves stopping PostgreSQL, creating a physical volume backup, restoring the archive into a separate volume and verifying the original database records.
+
+The final Compose configuration uses assets-restored as an external volume after restoration.
+
+## Security Principles
+
+- Defence in depth
+- Least privilege
+- Attack surface reduction
+- Network segmentation
+- Service availability
+- Data integrity
+- Operational resilience
+- Infrastructure monitoring
+
+## Learning Outcomes
+
+- Docker Compose health check configuration
+- PostgreSQL readiness verification
+- Service dependency management
+- Container health monitoring
+- Secure infrastructure deployment
+- Persistent storage management
+- Database backup and restoration
+- Operational reliability assessment
+
+## Project Status
+
+Status: Completed
+
+Project Type: Hands-on Container Security Lab
+
+Environment: Controlled Local Laboratory
+
+Portfolio Status: Active and Continuously Expanding
+
+This project forms part of my practical development in container security, secure infrastructure deployment and system administration.
+
+Future improvements and additional security controls may be introduced as my technical experience develops.
+
+## Project Scope
+
+This project demonstrates container health monitoring and secure infrastructure deployment rather than a complete production asset inventory application.
+
+---
+
+Container Security Portfolio - Project 07
