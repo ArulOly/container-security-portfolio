@@ -1,0 +1,237 @@
+
+# Project 09 - Advanced Container Runtime Hardening
+
+Secure Internal Web Service Environment
+
+## Project Overview
+
+This project explores advanced container runtime hardening using Docker Compose and an unprivileged NGINX container image.
+
+The project focuses on non-root execution, read-only container filesystems, Linux capability restrictions, temporary filesystem management, process limits and controlled network exposure.
+
+## Technical Objectives
+
+- Deploy a non-root web server container.
+- Configure a read-only root filesystem.
+- Remove unnecessary Linux capabilities.
+- Prevent additional privilege acquisition.
+- Configure temporary writable storage.
+- Restrict container process creation.
+- Apply CPU and memory restrictions.
+- Configure controlled network exposure.
+- Verify runtime security configurations.
+- Validate filesystem write restrictions.
+
+## Service Configuration
+
+| Parameter | Configuration |
+|---|---|
+| Service | secureweb |
+| Container | hardened-web |
+| Image | nginxinc/nginx-unprivileged:stable-alpine |
+| Container User | 101:101 |
+| Published Port | 127.0.0.1:8170:8080 |
+| CPU Limit | 0.5 |
+| Memory Limit | 256 MiB |
+| Process Limit | 100 |
+| Restart Policy | unless-stopped |
+| Root Filesystem | Read-only |
+| Privileged Mode | Disabled |
+
+## Network Architecture
+
+| Network | Driver | Connected Services |
+|---|---|---|
+| hardened-net | bridge | Secure Web Service |
+
+The web service is published only on the host loopback interface to restrict direct external access.
+
+## Docker Compose Configuration
+
+```yaml
+services:
+  secureweb:
+    image: nginxinc/nginx-unprivileged:stable-alpine
+    container_name: hardened-web
+    user: "101:101"
+    ports:
+      - "127.0.0.1:8170:8080"
+    cpus: 0.5
+    mem_limit: 256m
+    pids_limit: 100
+    restart: unless-stopped
+    privileged: false
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777
+    networks:
+      - hardened-net
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - -q
+        - --spider
+        - http://127.0.0.1:8080
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  hardened-net:
+    name: hardened-net
+    driver: bridge
+```
+
+## Advanced Runtime Security Controls
+
+| Control | Purpose |
+|---|---|
+| user: 101:101 | Execute the service without root privileges |
+| read_only: true | Restrict root filesystem modification |
+| cap_drop: ALL | Remove unnecessary Linux capabilities |
+| no-new-privileges | Prevent additional privilege acquisition |
+| privileged: false | Avoid privileged container execution |
+| tmpfs | Provide temporary writable storage |
+| noexec | Restrict direct execution from temporary storage |
+| nosuid | Disable set-user-ID effects on temporary storage |
+| nodev | Prevent device interpretation on temporary storage |
+| pids_limit | Restrict container process creation |
+| Localhost port binding | Reduce direct external exposure |
+
+## Deployment and Verification
+
+```powershell
+docker compose config --quiet
+docker compose up -d
+docker compose ps
+docker stats --no-stream
+docker logs hardened-web
+docker network inspect hardened-net
+```
+
+Web service testing is performed using localhost on port 8170.
+
+## Non-Root Execution Verification
+
+```powershell
+docker exec hardened-web id
+docker exec hardened-web whoami
+docker inspect --format "{{.Config.User}}" hardened-web
+```
+
+The configured container user is expected to have a non-zero user identifier.
+
+## Read-Only Filesystem Verification
+
+```powershell
+docker inspect --format "{{.HostConfig.ReadonlyRootfs}}" hardened-web
+```
+
+Perform a controlled filesystem write test:
+
+```powershell
+docker exec hardened-web touch /etc/security-test
+```
+
+The write operation is expected to fail because the root filesystem is mounted as read-only.
+
+## Temporary Filesystem Verification
+
+```powershell
+docker exec hardened-web touch /tmp/security-test
+docker exec hardened-web ls -l /tmp/security-test
+docker exec hardened-web rm /tmp/security-test
+```
+
+The temporary filesystem permits necessary temporary file operations without making the root filesystem writable.
+
+## Linux Capability Verification
+
+```powershell
+docker inspect --format "{{json .HostConfig.CapDrop}}" hardened-web
+docker exec hardened-web cat /proc/1/status
+```
+
+Review the capability fields within the process status information.
+
+## Privilege and Process Limit Verification
+
+```powershell
+docker inspect --format "{{.HostConfig.Privileged}}" hardened-web
+docker inspect --format "{{json .HostConfig.SecurityOpt}}" hardened-web
+docker inspect --format "{{.HostConfig.PidsLimit}}" hardened-web
+```
+
+## Health Monitoring
+
+```powershell
+docker inspect --format "{{.State.Health.Status}}" hardened-web
+docker inspect --format "{{json .State.Health}}" hardened-web
+```
+
+## Expected Verification Results
+
+| Verification Test | Expected Result |
+|---|---|
+| Web service deployment | Successful |
+| Container user | Non-root |
+| Root filesystem | Read-only |
+| Root filesystem write test | Denied |
+| Temporary filesystem write test | Permitted |
+| Privileged mode | Disabled |
+| Dropped capabilities | ALL |
+| Process limit | 100 |
+| Web service exposure | Localhost only |
+| Container health | Healthy |
+
+## Security Principles
+
+- Defence in depth
+- Least privilege
+- Non-root execution
+- Attack surface reduction
+- Filesystem integrity
+- Runtime isolation
+- Resource governance
+- Secure configuration management
+
+## Learning Outcomes
+
+- Advanced Docker Compose security configuration
+- Non-root container deployment
+- Read-only root filesystem management
+- Temporary filesystem configuration
+- Linux capability verification
+- Container process restrictions
+- Runtime security assessment
+- Controlled service exposure
+
+## Project Status
+
+Status: Completed
+
+Project Type: Advanced Container Security Lab
+
+Environment: Controlled Local Laboratory
+
+Portfolio Status: Active and Continuously Expanding
+
+This project forms part of my practical development in container security, Linux security and secure runtime infrastructure management.
+
+Future improvements and additional security controls may be introduced as my technical experience develops.
+
+## Project Scope
+
+This project demonstrates advanced runtime security controls using a dedicated unprivileged web server container.
+
+Container hardening reduces security risks but does not replace host security, vulnerability management or continuous monitoring.
+
+---
+
+Container Security Portfolio - Project 09
