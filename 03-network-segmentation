@@ -1,0 +1,207 @@
+
+# Project 03 - Container Network Segmentation
+
+Campus Event Registration System
+
+## Project Overview
+
+This project explores container network segmentation using Docker Compose, Apache HTTPD and PostgreSQL within a simulated campus event registration environment.
+
+The project focuses on frontend and backend network separation, controlled service communication, database isolation, resource management, container hardening, persistent storage and database disaster recovery.
+
+## Technical Objectives
+
+- Deploy Apache HTTPD and PostgreSQL containers.
+- Create custom Docker bridge networks.
+- Implement frontend and backend network segmentation.
+- Configure controlled container network membership.
+- Restrict direct database exposure.
+- Verify internal service connectivity.
+- Apply least-privilege security controls.
+- Maintain persistent database storage.
+- Perform database backup and restoration.
+
+## Service Configuration
+
+| Parameter | Web Service | Database Service |
+|---|---|---|
+| Service | events | database |
+| Container | events-web | events-db |
+| Image | httpd:2.4 | postgres:16 |
+| Published Port | 8120:80 | Disabled |
+| CPU Limit | 0.65 | 0.5 |
+| Memory Limit | 384 MiB | 512 MiB |
+| Restart Policy | unless-stopped | always |
+
+## Network Architecture
+
+| Network | Driver | Connected Services |
+|---|---|---|
+| events-front | bridge | Web |
+| events-back | bridge | Web and Database |
+
+The web container is connected to both frontend and backend networks.
+
+The database is restricted to the backend network without a published host port.
+
+This architecture reduces unnecessary network communication and direct database exposure.
+
+## Docker Compose Configuration
+
+```yaml
+services:
+  events:
+    image: httpd:2.4
+    container_name: events-web
+    ports:
+      - "8120:80"
+    cpus: 0.65
+    mem_limit: 384m
+    restart: unless-stopped
+    networks:
+      - events-front
+      - events-back
+    privileged: false
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  database:
+    image: postgres:16
+    container_name: events-db
+    environment:
+      POSTGRES_DB: eventsdb
+      POSTGRES_USER: eventuser
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set password}
+    cpus: 0.5
+    mem_limit: 512m
+    restart: always
+    networks:
+      - events-back
+    volumes:
+      - events-data:/var/lib/postgresql/data
+
+networks:
+  events-front:
+    name: events-front
+    driver: bridge
+
+  events-back:
+    name: events-back
+    driver: bridge
+
+volumes:
+  events-data:
+    name: events-data
+```
+
+## Security Controls
+
+| Control | Purpose |
+|---|---|
+| Custom bridge networks | Establish network segmentation |
+| Frontend network | Separate frontend service communication |
+| Backend network | Restrict database network membership |
+| Database port isolation | Reduce direct database exposure |
+| privileged: false | Avoid privileged execution |
+| cap_drop: ALL | Remove Linux capabilities |
+| no-new-privileges | Prevent additional privilege acquisition |
+| Resource limits | Control resource consumption |
+
+## Deployment and Verification
+
+```powershell
+docker compose config --quiet
+docker compose up -d
+docker compose ps
+docker stats --no-stream
+docker network ls
+docker network inspect events-front
+docker network inspect events-back
+docker port events-db
+docker logs events-web
+docker exec events-db pg_isready -U eventuser -d eventsdb
+```
+
+Web service testing is performed using localhost on port 8120.
+
+## Network Verification
+
+```powershell
+docker run --rm --network events-back alpine nslookup events-db
+docker run --rm --network events-back postgres:16 pg_isready -h events-db -U eventuser -d eventsdb
+docker run --rm --network events-front alpine nslookup events-db
+```
+
+| Verification Test | Expected Result |
+|---|---|
+| Web network membership | Frontend and backend |
+| Database network membership | Backend only |
+| Backend database name resolution | Successful |
+| Backend database readiness | Accepting connections |
+| Frontend database name resolution | Unsuccessful |
+| Published database port | None |
+
+Network verification focuses on confirming container network membership, internal name resolution and database accessibility.
+
+A failed DNS lookup alone does not establish complete network isolation.
+
+## Persistent Storage and Recovery
+
+| Parameter | Configuration |
+|---|---|
+| Database | eventsdb |
+| Test Table | registrations |
+| Original Volume | events-data |
+| Backup Directory | C:\EventsBackup |
+| Backup Archive | events-data.tar.gz |
+| Restored Volume | events-restored |
+
+The recovery procedure involves stopping PostgreSQL, creating a physical volume backup, restoring the archive into a separate volume and verifying the original database records.
+
+The final Compose configuration uses events-restored as an external volume after restoration.
+
+## Security Principles
+
+- Defence in depth
+- Least privilege
+- Attack surface reduction
+- Network segmentation
+- Controlled service communication
+- Data availability
+- Operational resilience
+
+## Learning Outcomes
+
+- Docker bridge network configuration
+- Container network segmentation
+- Container network membership
+- Internal DNS resolution
+- Database exposure reduction
+- Secure multi-container architecture
+- Network security verification
+
+## Project Status
+
+Status: Completed
+
+Project Type: Hands-on Container Security Lab
+
+Environment: Controlled Local Laboratory
+
+Portfolio Status: Active and Continuously Expanding
+
+This project forms part of my practical development in container security, secure infrastructure deployment and system administration.
+
+Future improvements and additional security controls may be introduced as my technical experience develops.
+
+## Project Scope
+
+This project is adapted from a container security practical exercise and operates within a controlled local laboratory environment.
+
+The web and database services demonstrate infrastructure deployment and network segmentation rather than a complete production event registration application.
+
+---
+
+Container Security Portfolio - Project 03
