@@ -1,0 +1,205 @@
+
+# Project 04 - Container Security Hardening
+
+Campus Student Services System
+
+## Project Overview
+
+This project explores container security hardening using Docker Compose, Apache HTTPD and PostgreSQL within a simulated campus student services environment.
+
+The project focuses on Linux capability management, least-privilege configuration, privilege escalation prevention, network segmentation, resource management, persistent storage and database disaster recovery.
+
+## Technical Objectives
+
+- Deploy Apache HTTPD and PostgreSQL containers.
+- Apply the principle of least privilege.
+- Disable privileged container execution.
+- Remove unnecessary Linux capabilities.
+- Prevent additional privilege acquisition.
+- Restore only necessary capabilities when justified.
+- Restrict unnecessary host filesystem access.
+- Implement frontend and backend network segmentation.
+- Maintain persistent database storage.
+- Perform database backup and restoration.
+
+## Service Configuration
+
+| Parameter | Web Service | Database Service |
+|---|---|---|
+| Service | studentportal | database |
+| Container | students-web | students-db |
+| Image | httpd:2.4 | postgres:16 |
+| Published Port | 8135:80 | Disabled |
+| CPU Limit | 0.8 | 0.65 |
+| Memory Limit | 448 MiB | 640 MiB |
+| Restart Policy | unless-stopped | always |
+
+## Network Architecture
+
+| Network | Driver | Connected Services |
+|---|---|---|
+| students-front | bridge | Web |
+| students-back | bridge | Web and Database |
+
+The database is restricted to the backend network without a published host port.
+
+## Docker Compose Configuration
+
+```yaml
+services:
+  studentportal:
+    image: httpd:2.4
+    container_name: students-web
+    ports:
+      - "8135:80"
+    cpus: 0.8
+    mem_limit: 448m
+    restart: unless-stopped
+    networks:
+      - students-front
+      - students-back
+    privileged: false
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  database:
+    image: postgres:16
+    container_name: students-db
+    environment:
+      POSTGRES_DB: studentdb
+      POSTGRES_USER: portaluser
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set password}
+    cpus: 0.65
+    mem_limit: 640m
+    restart: always
+    networks:
+      - students-back
+    volumes:
+      - students-data:/var/lib/postgresql/data
+
+networks:
+  students-front:
+    name: students-front
+    driver: bridge
+
+  students-back:
+    name: students-back
+    driver: bridge
+
+volumes:
+  students-data:
+    name: students-data
+```
+
+## Security Controls
+
+| Control | Purpose |
+|---|---|
+| privileged: false | Avoid privileged execution |
+| cap_drop: ALL | Remove Linux capabilities |
+| cap_add | Restore only justified capabilities when required |
+| security_opt | Configure additional security restrictions |
+| no-new-privileges | Prevent additional privilege acquisition |
+| No host bind mounts | Avoid unnecessary host directory access |
+| Network segmentation | Restrict unnecessary communication |
+| Resource limits | Control resource consumption |
+| Database port isolation | Reduce direct database exposure |
+
+## Deployment and Verification
+
+```powershell
+docker compose config --quiet
+docker compose up -d
+docker compose ps
+docker stats --no-stream
+docker network inspect students-front
+docker network inspect students-back
+docker logs students-web
+docker exec students-db pg_isready -U portaluser -d studentdb
+```
+
+Web service testing is performed using localhost on port 8135.
+
+## Container Hardening Verification
+
+```powershell
+docker inspect students-web --format '{{.HostConfig.Privileged}}'
+docker inspect students-web --format '{{json .HostConfig.CapDrop}}'
+docker inspect students-web --format '{{json .HostConfig.CapAdd}}'
+docker inspect students-web --format '{{json .HostConfig.SecurityOpt}}'
+docker exec students-web cat /proc/1/status
+```
+
+| Security Parameter | Expected Configuration |
+|---|---|
+| Privileged Mode | false |
+| Dropped Capabilities | ALL |
+| Added Capabilities | Only justified capabilities if required |
+| Security Option | no-new-privileges:true |
+| NoNewPrivs | 1 |
+| Host Bind Mounts | None |
+
+The hardening process focuses on reducing unnecessary container permissions while maintaining service functionality.
+
+Apache compatibility must be evaluated after removing Linux capabilities. Any capability restored through cap_add must be justified by application requirements and supported by testing.
+
+## Persistent Storage and Recovery
+
+| Parameter | Configuration |
+|---|---|
+| Database | studentdb |
+| Test Table | requests |
+| Original Volume | students-data |
+| Backup Directory | C:\StudentsBackup |
+| Backup Archive | students-data.tar.gz |
+| Restored Volume | students-restored |
+
+The recovery procedure involves stopping PostgreSQL, creating a physical volume backup, restoring the archive into a separate volume and verifying the original database records.
+
+The final Compose configuration uses students-restored as an external volume after restoration.
+
+## Security Principles
+
+- Defence in depth
+- Principle of least privilege
+- Attack surface reduction
+- Privilege escalation prevention
+- Network segmentation
+- Secure configuration management
+- Operational resilience
+
+## Learning Outcomes
+
+- Linux capability management
+- Container security hardening
+- Docker Compose security configuration
+- Privilege escalation prevention
+- Container security inspection
+- Application compatibility testing
+- Infrastructure security verification
+
+## Project Status
+
+Status: Completed
+
+Project Type: Hands-on Container Security Lab
+
+Environment: Controlled Local Laboratory
+
+Portfolio Status: Active and Continuously Expanding
+
+This project forms part of my practical development in container security, secure infrastructure deployment and system administration.
+
+Future improvements and additional security controls may be introduced as my technical experience develops.
+
+## Project Scope
+
+This project is adapted from a container security practical exercise and operates within a controlled local laboratory environment.
+
+The web and database services demonstrate infrastructure deployment and container security hardening rather than a complete production student services application.
+
+---
+
+Container Security Portfolio - Project 04
